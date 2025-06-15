@@ -16,20 +16,16 @@
 
     <!-- 新闻种类统计查询 -->
     <el-form-item v-if="queryType === 'news_category_stats'" label="新闻类别">
-      <el-select 
+      <el-input 
         v-model="formData.newsCategory" 
-        placeholder="请选择新闻类别"
+        placeholder="请输入新闻类别"
         class="w-100"
         clearable
       >
         <template #prefix>
           <el-icon><Collection /></el-icon>
         </template>
-        <el-option label="健康" value="健康" />
-        <el-option label="体育" value="体育" />
-        <el-option label="科技" value="科技" />
-        <el-option label="娱乐" value="娱乐" />
-      </el-select>
+      </el-input>
     </el-form-item>
 
     <!-- 用户兴趣变化统计查询 -->
@@ -105,6 +101,24 @@
         </template>
       </el-input>
     </el-form-item>
+
+    <!-- 查询记录 -->
+     <template v-if="queryType === 'query_logs'">
+      <el-form-item label="时间范围">
+        <el-date-picker
+          v-model="formData.timeRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          class="w-100"
+        >
+          <template #prefix>
+            <el-icon><Calendar /></el-icon>
+          </template>
+        </el-date-picker>
+      </el-form-item>
+    </template>
 
     <!-- 查询按钮 -->
     <el-form-item>

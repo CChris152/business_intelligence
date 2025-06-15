@@ -52,160 +52,129 @@ def query_1(news_id: str):
 
 
 def query_2(category: str):
-    # 计算 24 小时前的截止时间
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    # 计算过去 3 天的截止时间（基于 UTC 时间）
+    cutoff = datetime.utcnow() - timedelta(days=3)
 
-    # 按 date_hour 分组，统计各项指标
+    # 统计每一天该 category 出现的记录次数（将一行视作一次）
     query = (
         db.session.query(
-            CategoryTrend.date_hour,
-            func.sum(CategoryTrend.total_articles).label("articles"),
-            func.sum(CategoryTrend.total_reads).label("reads"),
-            func.sum(CategoryTrend.total_interactions).label("interactions"),
-            func.avg(CategoryTrend.avg_engagement).label("avg_eng")
+            func.date(CategoryTrend.date_hour).label("date_day"),
+            func.count().label("occurrences")
         )
         .filter(CategoryTrend.category == category)
         .filter(CategoryTrend.date_hour >= cutoff)
-        .group_by(CategoryTrend.date_hour)
-        .order_by(CategoryTrend.date_hour)
+        .group_by(func.date(CategoryTrend.date_hour))
+        .order_by(func.date(CategoryTrend.date_hour))
     )
 
     rows = query.all()
     if not rows:
         return []
 
-    # 初始化各指标对应的数组
-    labels = []
-    total_articles_vals = []
-    total_reads_vals = []
-    total_interactions_vals = []
-    avg_eng_vals = []
+    # 构造连续日期序列：从 cutoff 的日期到今天（含）
+    start_day = cutoff.date()
+    end_day = datetime.utcnow().date()
+    day_list = []
+    current = start_day
+    while current <= end_day:
+        day_list.append(current.strftime("%Y-%m-%d"))
+        current += timedelta(days=1)
 
+    # 初始化字典，以日期字符串为 key，对应值初始为 0
+    daily_counts = {day: 0 for day in day_list}
     for row in rows:
-        # 格式化日期时间提高前端展示友好性
-        labels.append(row.date_hour.strftime("%Y-%m-%d %H:%M:%S"))
-        total_articles_vals.append(row.articles)
-        total_reads_vals.append(row.reads)
-        total_interactions_vals.append(row.interactions)
-        avg_eng_vals.append(float(row.avg_eng) if row.avg_eng is not None else 0.0)
+        # row.date_day 可能为 date 类型，也可能为 datetime 类型
+        day_str = row.date_day.strftime("%Y-%m-%d") if hasattr(row.date_day, "strftime") else str(row.date_day)
+        daily_counts[day_str] = row.occurrences
 
-    # 分别构造各指标的查询结果，并自定义 title 名称区分
-    result = [
-        {
-            "title": "文章总数趋势",
-            "labels": labels,
-            "values": total_articles_vals
-        },
-        {
-            "title": "总阅读量趋势",
-            "labels": labels,
-            "values": total_reads_vals
-        },
-        {
-            "title": "总互动量趋势",
-            "labels": labels,
-            "values": total_interactions_vals
-        },
-        {
-            "title": "平均互动趋势",
-            "labels": labels,
-            "values": avg_eng_vals
-        }
-    ]
+    # 构造每天的记录数列表（作为 labels），并对每个值除以 1000
+    counts = [daily_counts.get(day, 0) for day in day_list]
+
+    # 按要求，将 labels 数组两边各加一个 0
+    padded_counts = [0] + counts + [0]
+
+    # 对应的 values 数组为日期序列，扩展两侧：在最前面加上第一天的前一天，在末尾加上最后一天的后一天
+    first_date = datetime.strptime(day_list[0], "%Y-%m-%d").date() - timedelta(days=1)
+    last_date = datetime.strptime(day_list[-1], "%Y-%m-%d").date() + timedelta(days=1)
+    padded_dates = [first_date.strftime("%Y-%m-%d")] + day_list + [last_date.strftime("%Y-%m-%d")]
+
+    result = [{
+        "title": "趋势统计 (每天记录计数 / 1000)",
+        "labels": padded_dates,
+        "values": padded_counts
+    }]
 
     return result
 
 
 def query_3(uid: str):
-    # 指定需要统计的四种兴趣标签
-    categories = ["健康", "体育", "科技", "娱乐"]
+    categories = ["news", "health", "sports", "lifesyle", "music", "autos", "foodanddrink", "finance", "weather"]
 
-    # 计算起始日期：最近 7 天（含今天）
-    cutoff = date.today() - timedelta(days=7)
-
-    # 查询指定用户最近 7 天的记录，按 date_period 升序排序
+    # 查询指定用户所有的记录，不再限制时间
     rows = (
         db.session.query(UserInterestEvolution)
-        .filter(
-            UserInterestEvolution.user_id == uid,
-            UserInterestEvolution.date_period >= cutoff
-        )
-        .order_by(UserInterestEvolution.date_period)
+        .filter(UserInterestEvolution.user_id == uid)
         .all()
     )
 
-    # 如果没有记录，直接返回空列表
     if not rows:
         return []
 
-    # 构造连续的日期序列：从 cutoff 开始到今天
-    date_list = []
-    current = cutoff
-    while current <= date.today():
-        date_list.append(current.strftime("%Y-%m-%d"))
-        current += timedelta(days=1)
+    # 初始化计数字典，所有兴趣的初始值均为 0
+    counts = {cat: 0 for cat in categories}
 
-    # 构造字典存储每天每个类别的计数，初始化全部为 0
-    daily_counts = {d: {cat: 0 for cat in categories} for d in date_list}
-
-    # 遍历查询结果，统计每天 interest_categories 中包含指定类别的次数
+    # 遍历记录，拆解 interest_categories（JSON 数组）并统计出现次数
     for record in rows:
-        # 将记录的 date_period 格式化为字符串（例如 "2025-06-07"）
-        record_date = record.date_period.strftime("%Y-%m-%d")
-        # 仅处理日期在 date_list 中的记录
-        if record_date in daily_counts:
-            # 假设 interest_categories 为 JSON 格式（通常映射为 Python 的 list）
-            interests = record.interest_categories if record.interest_categories else []
-            for cat in categories:
-                if cat in interests:
-                    daily_counts[record_date][cat] += 1
+        interests = record.interest_categories if record.interest_categories else []
+        for cat in interests:
+            if cat in counts:
+                counts[cat] += 1
 
-    # 根据日期序列构造每个类别的趋势数据
-    result = []
-    for cat in categories:
-        values = []
-        for d in date_list:
-            values.append(daily_counts[d].get(cat, 0))
-        result.append({
-            "title": cat,
-            "labels": date_list,
-            "values": values
-        })
+    # 计算所有类别数量之和
+    total = sum(counts.values())
+
+    # 计算每个兴趣的百分比，保留两位小数，当 total==0 时均为 0
+    percentages = [
+        round((counts[cat] / total * 100), 2) if total > 0 else 0 for cat in categories
+    ]
+
+    # 构造结果：labels 使用预先定义的兴趣标签，values 为各兴趣出现的百分比
+    result = [{
+        "title": "Interest Distribution",
+        "labels": categories,
+        "values": percentages
+    }]
 
     return result
 
 
-def query_4(time_str: str, category: str, length: str):
-    try:
-        given_date = datetime.strptime(time_str, "%Y-%m-%d")
-    except Exception:
-        return []
-
-        # 当天起始时间和次日起始时间
-    end_date = given_date + timedelta(days=1)
-
-    # 构造基本查询条件：发布时间在当天内，类别匹配
+def query_4(start_date: datetime, end_date: datetime, category: str, length: str):
+    # 构造基本查询条件：发布时间在给定范围内，类别匹配
     query = db.session.query(NewsArticle).filter(
-        NewsArticle.publish_time >= given_date,
-        NewsArticle.publish_time < end_date,
+        NewsArticle.created_at >= start_date,
+        NewsArticle.created_at < end_date,
         NewsArticle.category == category
     )
 
-    # 根据 content 字符长度过滤，使用 func.length
+    # 根据内容字符长度过滤记录
     if length == "短":
-        query = query.filter(func.char_length(NewsArticle.content) <= 200)
+        query = query.filter(func.char_length(NewsArticle.news_body) <= 200)
     elif length == "中":
-        query = query.filter(func.char_length(NewsArticle.content) > 200, func.char_length(NewsArticle.content) <= 500)
+        query = query.filter(
+            func.char_length(NewsArticle.news_body) > 200,
+            func.char_length(NewsArticle.news_body) <= 500
+        )
     elif length == "长":
-        query = query.filter(func.char_length(NewsArticle.content) > 500)
+        query = query.filter(func.char_length(NewsArticle.news_body) > 500)
+
+    query = query.limit(100)
 
     articles = query.all()
 
     result = []
     for idx, article in enumerate(articles, start=1):
-        content_len = len(article.content) if article.content else 0
-        # 格式化发布时间，若存在
-        publish_str = article.publish_time.strftime("%Y-%m-%d %H:%M:%S") if article.publish_time else ""
+        content_len = len(article.news_body) if article.news_body else 0
+        publish_str = article.created_at.strftime("%Y-%m-%d %H:%M:%S") if article.created_at else ""
         # 构造标题：序号. 新闻标题 - 新闻类别 - 字符数字 - 发布时间
         title_str = f"{idx}. {article.headline} - {article.category} - {content_len}字 - {publish_str}"
         result.append({
@@ -218,28 +187,45 @@ def query_4(time_str: str, category: str, length: str):
 
 
 def query_5():
-    query = (
-        db.session.query(ViralNewsPrediction, NewsArticle)
-        .join(NewsArticle, ViralNewsPrediction.news_id == NewsArticle.news_id)
-        .filter(ViralNewsPrediction.predicted_peak_time >= func.now())
+    # 计算截止时间：当前时间减去 3 天
+    cutoff = datetime.now() - timedelta(days=3)
+
+    # 第一步：只查询 ViralNewsPrediction 表中 created_at 在 3 天内的记录，
+    # 按 viral_score 降序排序，取前 10 条（只需要 id、news_id、viral_score）
+    predictions = (
+        db.session.query(ViralNewsPrediction)
+        .filter(ViralNewsPrediction.created_at >= cutoff)
         .order_by(desc(ViralNewsPrediction.viral_score))
-        .limit(10)
+        .limit(5)
+        .all()
     )
-    results = query.all()
-    if not results:
+
+    if not predictions:
         return []
 
     output = []
     rank = 1
-    for viral, article in results:
-        # 构造 title 内容：排名. 新闻标题 - 新闻类别
-        title = "{}. {} - {}".format(rank, article.headline, article.category)
+    for pred in predictions:
+        # 第二步：通过 news_id 在 NewsArticle 中查询相应记录
+        article = (
+            db.session.query(NewsArticle)
+            .filter(NewsArticle.news_id.collate("utf8mb4_unicode_ci") == pred.news_id)
+            .first()
+        )
+        if article:
+            # 如果找到了文章，则构造："排名. 新闻标题 - 新闻类别"
+            title = "{}. {} - {}".format(rank, article.headline, article.category)
+        else:
+            # 如果文章未找到，则构造："排名. id"
+            title = "{}. {}".format(rank, pred.id)
+
         output.append({
             "title": title,
             "labels": [],
             "values": []
         })
         rank += 1
+
     return output
 
 
@@ -285,46 +271,82 @@ def query_6(uid: str):
 
 
 def query_7():
-    # 固定分类列表
-    categories = ["健康", "体育", "科技", "娱乐"]
-    # 计算过去7天的截止时间
-    cutoff = datetime.utcnow() - timedelta(days=7)
+    categories = ["news", "health", "sports", "lifesyle", "music", "autos", "foodanddrink", "finance", "weather"]
+    # 计算过去 3 天的截止时间（基于 UTC 时间）
+    cutoff = datetime.utcnow() - timedelta(days=3)
 
-    result = []
-    for cat in categories:
-        # 使用 func.date() 将 datetime 转换为日期，以便按天分组
+    results = []
+
+    for category in categories:
+        # 统计每一天该 category 出现的记录次数（将一行视作一次）
         query = (
             db.session.query(
-                func.date(CategoryTrend.date_hour).label("day"),
-                func.sum(CategoryTrend.total_articles).label("articles"),
-                func.sum(CategoryTrend.total_reads).label("reads")
+                func.date(CategoryTrend.date_hour).label("date_day"),
+                func.count().label("occurrences")
             )
-            .filter(CategoryTrend.category == cat)
+            .filter(CategoryTrend.category == category)
             .filter(CategoryTrend.date_hour >= cutoff)
             .group_by(func.date(CategoryTrend.date_hour))
             .order_by(func.date(CategoryTrend.date_hour))
         )
+
         rows = query.all()
 
-        labels = []
-        articles_vals = []
-        reads_vals = []
+        # 构造连续日期序列：从 cutoff 的日期到今天（含）
+        start_day = cutoff.date()
+        end_day = datetime.utcnow().date()
+        day_list = []
+        current = start_day
+        while current <= end_day:
+            day_list.append(current.strftime("%Y-%m-%d"))
+            current += timedelta(days=1)
 
+        # 初始化字典，以日期字符串为 key，对应值初始为 0
+        daily_counts = {day: 0 for day in day_list}
         for row in rows:
-            # row.day 为日期类型，格式化为字符串显示（例如 "2025-06-07"）
-            labels.append(row.day.strftime("%Y-%m-%d"))
-            articles_vals.append(row.articles)
-            reads_vals.append(row.reads)
+            # row.date_day 可能为 date 类型，也可能为 datetime 类型
+            day_str = row.date_day.strftime("%Y-%m-%d") if hasattr(row.date_day, "strftime") else str(row.date_day)
+            daily_counts[day_str] = row.occurrences
+
+        # 构造每天的记录数列表（作为 labels）
+        counts = [daily_counts.get(day, 0) for day in day_list]
+
+        # 按要求，将 labels 数组两边各加一个 0
+        padded_counts = [0] + counts + [0]
+
+        # 对应的 values 数组为日期序列，扩展两侧：在最前面加上第一天的前一天，在末尾加上最后一天的后一天
+        first_date = datetime.strptime(day_list[0], "%Y-%m-%d").date() - timedelta(days=1)
+        last_date = datetime.strptime(day_list[-1], "%Y-%m-%d").date() + timedelta(days=1)
+        padded_dates = [first_date.strftime("%Y-%m-%d")] + day_list + [last_date.strftime("%Y-%m-%d")]
+
+        results.append({
+            "title": f"{category} 趋势统计 (每天记录计数)",
+            "labels": padded_dates,
+            "values": padded_counts
+        })
+
+    return results
+
+
+def query_8(start_date: datetime, end_date: datetime):
+    # 根据 query_timestamp 限定查询范围，并查询所有满足条件的记录
+    logs = QueryLog.query.filter(
+        QueryLog.query_timestamp >= start_date,
+        QueryLog.query_timestamp <= end_date
+    ).all()
+
+    # 对每一条记录分别构造一个字典并加入结果数组
+    result = []
+    for log in logs:
+        qtype = log.query_type if log.query_type is not None else ""
+        sql_query = log.sql_query if log.sql_query is not None else ""
+        exec_time = str(log.execution_time_ms) if log.execution_time_ms is not None else "0"
+        title_str = f"{qtype} | {sql_query} | {exec_time}ms"
 
         result.append({
-            "title": f"{cat}-文章总数趋势",
-            "labels": labels,
-            "values": articles_vals
-        })
-        result.append({
-            "title": f"{cat}-总阅读量趋势",
-            "labels": labels,
-            "values": reads_vals
+            "title": title_str,
+            "labels": [],
+            "values": []
         })
 
     return result

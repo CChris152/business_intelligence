@@ -90,6 +90,7 @@ const queryTypes = [
   { value: 'viral_news_analysis', label: '爆款新闻分析' },
   { value: 'realtime_recommendation', label: '实时新闻推荐' },
   { value: 'daily_news_topic', label: '每日新闻主题变化' },
+  { value: 'query_logs', label: '查询记录' },
 ];
 
 const currentQueryLabel = computed(() => {
@@ -115,6 +116,7 @@ const fetchData = async (formData) => {
       body: JSON.stringify(payload),
     });
     chartData.value = await response.json();
+    console.log(chartData.value)
   } catch (error) {
     console.error('查询失败:', error);
   }

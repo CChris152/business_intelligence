@@ -1,33 +1,33 @@
+from sqlalchemy import func
+
 from app.init import db
 from datetime import datetime
 from decimal import Decimal
 import enum
 
+
 class NewsArticle(db.Model):
     __tablename__ = 'news_articles'
+    __table_args__ = {
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+        'mysql_collate': 'utf8mb4_unicode_ci',
+        'mysql_row_format': 'Dynamic'
+    }
 
-    news_id = db.Column(db.String(20), primary_key=True)
-    headline = db.Column(db.Text, nullable=False)
-    content = db.Column(db.Text, nullable=True)  # longtext 可映射为 Text
-    category = db.Column(db.String(50), nullable=True)
-    topic = db.Column(db.String(100), nullable=True)
-    word_count = db.Column(db.Integer, nullable=True, default=0)
-    publish_time = db.Column(db.DateTime, nullable=True)
-    source = db.Column(db.String(100), nullable=True)
-    tags = db.Column(db.JSON, nullable=True)
-    entities = db.Column(db.JSON, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow)
-    updated_at = db.Column(
+    # 主键字段：自增ID
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    # 其它字段
+    news_id = db.Column(db.String(50), nullable=True)
+    category = db.Column(db.String(100), nullable=True)
+    topic = db.Column(db.String(200), nullable=True)
+    headline = db.Column(db.Text, nullable=True)  # longtext对应Text
+    news_body = db.Column(db.Text, nullable=True)  # longtext对应Text
+    title_entity = db.Column(db.Text, nullable=True)  # longtext对应Text
+    entity_content = db.Column(db.Text, nullable=True)  # longtext对应Text
+    created_at = db.Column(
         db.DateTime,
         nullable=True,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow
-    )
-
-    __table_args__ = (
-        db.Index('idx_category', 'category'),
-        db.Index('idx_topic', 'topic'),
-        db.Index('idx_publish_time', 'publish_time'),
-        db.Index('idx_word_count', 'word_count'),
-        db.Index('idx_news_articles_category_topic', 'category', 'topic'),
+        server_default=func.current_timestamp()
     )
