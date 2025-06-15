@@ -17,91 +17,37 @@ from app.model.category_trend import CategoryTrend
 from app.model.multidim_statistic import MultidimStatistic
 from app.model.news_lifecycle import NewsLifecycle
 from app.model.performance_metric import PerformanceMetric
+from app.model.news_lifecycle2 import NewsLifecycle2
 
 
 def query_1(news_id: str):
-    order_case = case(
-        (NewsLifecycle.time_period == '1h', 1),
-        (NewsLifecycle.time_period == '6h', 2),
-        (NewsLifecycle.time_period == '12h', 3),
-        (NewsLifecycle.time_period == '1d', 4),
-        (NewsLifecycle.time_period == '3d', 5),
-        (NewsLifecycle.time_period == '7d', 6),
-        else_=7
+    # 先筛选出指定 news_id 的记录，并根据 total_reads 降序排列，取第一条，即为最大 total_reads 的记录
+    record = (
+        db.session.query(NewsLifecycle2)
+        .filter(NewsLifecycle2.news_id == news_id)
+        .order_by(NewsLifecycle2.total_reads.desc())
+        .first()
     )
+    if not record:
+        return {}
 
-    query_results = (
-        db.session.query(NewsLifecycle, NewsArticle)
-        .join(NewsArticle, NewsLifecycle.news_id == NewsArticle.news_id)
-        .filter(NewsLifecycle.news_id == news_id)
-        .order_by(order_case)
-        .all()
-    )
+    # 提取所需要的字段
+    start_time = record.start_time
+    end_time = record.end_time
+    max_total_reads = record.total_reads if record.total_reads is not None else 0
 
-    if not query_results:
-        return []
+    # 如果 start_time 和 end_time 都可用，则计算它们之间的中间时间
+    if start_time and end_time:
+        mid_time = start_time + (end_time - start_time) / 2
+    else:
+        mid_time = None
 
-    labels = []  # 时间段
-    total_reads_vals = []
-    total_likes_vals = []
-    total_shares_vals = []
-    total_comments_vals = []
-    unique_readers_vals = []
-    popularity_scores = []
-    growth_rates = []
+    # 构造长度为 3 的数据列表
+    values = [0, max_total_reads, 0]
+    labels = [start_time, mid_time, end_time]
 
-    for lifecycle, article in query_results:
-        labels.append(lifecycle.time_period)
-        total_reads_vals.append(lifecycle.total_reads)
-        total_likes_vals.append(lifecycle.total_likes)
-        total_shares_vals.append(lifecycle.total_shares)
-        total_comments_vals.append(lifecycle.total_comments)
-        unique_readers_vals.append(lifecycle.unique_readers)
-        # 对于数值型数据，注意可能为 None 的处理
-        popularity_scores.append(
-            float(lifecycle.popularity_score) if lifecycle.popularity_score is not None else 0.0
-        )
-        growth_rates.append(
-            float(lifecycle.growth_rate) if lifecycle.growth_rate is not None else 0.0
-        )
-
-    result = [
-        {
-            "title": "总阅读量",
-            "labels": labels,
-            "values": total_reads_vals
-        },
-        {
-            "title": "总点赞数",
-            "labels": labels,
-            "values": total_likes_vals
-        },
-        {
-            "title": "转发量",
-            "labels": labels,
-            "values": total_shares_vals
-        },
-        {
-            "title": "评论数",
-            "labels": labels,
-            "values": total_comments_vals
-        },
-        {
-            "title": "唯一阅读者数",
-            "labels": labels,
-            "values": unique_readers_vals
-        },
-        {
-            "title": "人气分数",
-            "labels": labels,
-            "values": popularity_scores
-        },
-        {
-            "title": "增长率",
-            "labels": labels,
-            "values": growth_rates
-        }
-    ]
+    result = [{"title": "总阅读量", "labels": labels, "values": values}]
+    print(result)
     return result
 
 
@@ -170,7 +116,7 @@ def query_2(category: str):
     return result
 
 
-def query_3(uid:str):
+def query_3(uid: str):
     # 指定需要统计的四种兴趣标签
     categories = ["健康", "体育", "科技", "娱乐"]
 
@@ -297,7 +243,7 @@ def query_5():
     return output
 
 
-def query_6(uid:str):
+def query_6(uid: str):
     # 查询用户最新的一次推荐记录（最新推荐）
     rec = (
         db.session.query(RealTimeRecommendation)
@@ -329,7 +275,7 @@ def query_6(uid:str):
         article = article_map.get(news_id)
         if article:
             # 构造 title 格式： "序号. 新闻标题 - 新闻类型"
-            title_str = "{}. {} - {}".format(idx+1, article.headline, article.category)
+            title_str = "{}. {} - {}".format(idx + 1, article.headline, article.category)
             result.append({
                 "title": title_str,
                 "labels": [],

@@ -1,129 +1,216 @@
 <template>
-  <form @submit.prevent="submitForm" class="query-form">
+  <el-form @submit.prevent="submitForm" class="query-form" label-position="top">
     <!-- 单个新闻生命周期查询 -->
-    <div v-if="queryType === 'news_lifecycle'" class="form-group">
-      <label class="form-label">新闻ID：</label>
-      <input class="form-input" v-model="formData.newsId" type="text" required />
-    </div>
+    <el-form-item v-if="queryType === 'news_lifecycle'" label="新闻ID">
+      <el-input 
+        v-model="formData.newsId" 
+        placeholder="请输入新闻ID"
+        clearable
+        required
+      >
+        <template #prefix>
+          <el-icon><Document /></el-icon>
+        </template>
+      </el-input>
+    </el-form-item>
 
     <!-- 新闻种类统计查询 -->
-    <div v-if="queryType === 'news_category_stats'" class="form-group">
-      <label class="form-label">新闻类别：</label>
-      <select class="form-input" v-model="formData.newsCategory">
-        <option value="健康">健康</option>
-        <option value="体育">体育</option>
-        <option value="科技">科技</option>
-        <option value="娱乐">娱乐</option>
-      </select>
-    </div>
+    <el-form-item v-if="queryType === 'news_category_stats'" label="新闻类别">
+      <el-select 
+        v-model="formData.newsCategory" 
+        placeholder="请选择新闻类别"
+        class="w-100"
+        clearable
+      >
+        <template #prefix>
+          <el-icon><Collection /></el-icon>
+        </template>
+        <el-option label="健康" value="健康" />
+        <el-option label="体育" value="体育" />
+        <el-option label="科技" value="科技" />
+        <el-option label="娱乐" value="娱乐" />
+      </el-select>
+    </el-form-item>
 
     <!-- 用户兴趣变化统计查询 -->
-    <div v-if="queryType === 'user_interest_stats'" class="form-group">
-      <label class="form-label">用户ID：</label>
-      <input class="form-input" v-model="formData.userId" type="text" required />
-    </div>
+    <el-form-item v-if="queryType === 'user_interest_stats'" label="用户ID">
+      <el-input 
+        v-model="formData.userId" 
+        placeholder="请输入用户ID"
+        clearable
+        required
+      >
+        <template #prefix>
+          <el-icon><User /></el-icon>
+        </template>
+      </el-input>
+    </el-form-item>
 
     <!-- 多种条件组合查询 -->
-    <div v-if="queryType === 'custom_filters'" class="form-group">
-      <div class="sub-group">
-        <label class="form-label">时间范围：</label>
-        <input class="form-input" v-model="formData.timeRange" type="date" />
-      </div>
-      <div class="sub-group">
-        <label class="form-label">新闻类型：</label>
-        <input class="form-input" v-model="formData.newsTopic" type="text" />
-      </div>
-      <div class="sub-group">
-        <label class="form-label">新闻长度：</label>
-        <select class="form-input" v-model="formData.newsLength">
-          <option disabled value="">请选择</option>
-          <option value="短">短</option>
-          <option value="中">中</option>
-          <option value="长">长</option>
-        </select>
-      </div>
-    </div>
+    <template v-if="queryType === 'custom_filters'">
+      <el-form-item label="时间范围">
+        <el-date-picker
+          v-model="formData.timeRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          class="w-100"
+        >
+          <template #prefix>
+            <el-icon><Calendar /></el-icon>
+          </template>
+        </el-date-picker>
+      </el-form-item>
+      
+      <el-form-item label="新闻类型">
+        <el-input 
+          v-model="formData.newsTopic" 
+          placeholder="请输入新闻类型"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><Collection /></el-icon>
+          </template>
+        </el-input>
+      </el-form-item>
+      
+      <el-form-item label="新闻长度">
+        <el-select 
+          v-model="formData.newsLength" 
+          placeholder="请选择新闻长度"
+          class="w-100"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><ScaleToOriginal /></el-icon>
+          </template>
+          <el-option label="短" value="短" />
+          <el-option label="中" value="中" />
+          <el-option label="长" value="长" />
+        </el-select>
+      </el-form-item>
+    </template>
 
-    <div v-if="queryType === 'realtime_recommendation'" class="form-group">
-      <label class="form-label">用户ID：</label>
-      <input class="form-input" v-model="formData.userId" type="text" required />
-    </div>
+    <!-- 实时新闻推荐 -->
+    <el-form-item v-if="queryType === 'realtime_recommendation'" label="用户ID">
+      <el-input 
+        v-model="formData.userId" 
+        placeholder="请输入用户ID"
+        clearable
+        required
+      >
+        <template #prefix>
+          <el-icon><User /></el-icon>
+        </template>
+      </el-input>
+    </el-form-item>
 
     <!-- 查询按钮 -->
-    <div class="form-group">
-      <button type="submit" class="submit-button">查询</button>
-    </div>
-  </form>
+    <el-form-item>
+      <el-button 
+        type="primary" 
+        native-type="submit"
+        class="submit-button"
+        :loading="loading"
+      >
+        <el-icon v-if="!loading"><Search /></el-icon>
+        <span>{{ loading ? '查询中...' : '开始查询' }}</span>
+      </el-button>
+    </el-form-item>
+  </el-form>
 </template>
 
 <script setup>
 import { ref, defineProps, defineEmits } from 'vue';
+import { 
+  Document, 
+  Collection, 
+  User, 
+  Calendar, 
+  ScaleToOriginal,
+  Search
+} from '@element-plus/icons-vue';
 
 const props = defineProps({ queryType: String });
 const emit = defineEmits(['query-submit']);
 
 const formData = ref({});
+const loading = ref(false);
 
-const submitForm = () => {
-  emit('query-submit', formData.value);
+const submitForm = async () => {
+  loading.value = true;
+  try {
+    emit('query-submit', formData.value);
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 
 <style scoped>
-/* 整体表单容器样式 */
 .query-form {
-  max-width: 500px;
-  margin: 0 auto;
-  padding: 20px;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  max-width: 100%;
 }
 
-/* 每个表单组 */
-.form-group {
-  margin-bottom: 15px;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 子项组 */
-.sub-group {
-  margin-bottom: 10px;
-}
-
-/* 标签 */
-.form-label {
-  font-size: 16px;
-  margin-bottom: 5px;
-  font-weight: bold;
-  color: #333;
-}
-
-/* 表单输入框 */
-.form-input {
-  padding: 8px 10px;
-  font-size: 14px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+.w-100 {
   width: 100%;
-  box-sizing: border-box;
 }
 
-/* 查询按钮 */
 .submit-button {
-  background-color: #409eff;
-  color: #fff;
-  border: none;
-  padding: 10px 15px;
-  font-size: 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
   width: 100%;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.submit-button:hover {
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-select) {
+  box-shadow: 0 0 0 1px #dcdfe6 inset;
+}
+
+:deep(.el-input__wrapper:hover),
+:deep(.el-select:hover) {
+  box-shadow: 0 0 0 1px #409EFF inset;
+}
+
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-select.is-focus) {
+  box-shadow: 0 0 0 1px #409EFF inset;
+}
+
+:deep(.el-input__prefix) {
+  color: #909399;
+}
+
+:deep(.el-button--primary) {
+  background-color: #409EFF;
+  border-color: #409EFF;
+  padding: 12px 20px;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+:deep(.el-button--primary:hover) {
   background-color: #66b1ff;
+  border-color: #66b1ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 12px 0 rgba(64, 158, 255, 0.1);
+}
+
+:deep(.el-button--primary:active) {
+  transform: translateY(0);
+}
+
+:deep(.el-date-editor) {
+  width: 100%;
 }
 </style>

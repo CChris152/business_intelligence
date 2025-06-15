@@ -1,28 +1,39 @@
 <template>
   <div class="charts-container">
-    <!-- 判断：如果 data 中的每项都没有图表数据，则展示列表 -->
-    <template v-if="isAllEmpty">
-      <ul class="empty-list">
-        <li v-for="(chart, index) in data" :key="index">
-          {{ chart.title }}
-        </li>
-      </ul>
-    </template>
+    <!-- 判断：如果 data 中的每项都没有图表数据，则展示空状态 -->
+    <el-empty 
+      v-if="isAllEmpty" 
+      description="暂无数据"
+      :image-size="200"
+    >
+      <template #description>
+        <p>暂无查询结果</p>
+      </template>
+    </el-empty>
+
     <!-- 否则展示图表 -->
     <template v-else>
-      <div
-        v-for="(chartData, index) in data"
-        :key="index"
-        class="chart-wrapper"
-      >
-        <div ref="chartRefs" class="chart-container"></div>
-      </div>
+      <el-row :gutter="20">
+        <el-col 
+          v-for="(chartData, index) in data" 
+          :key="index"
+          :xs="24" 
+          :sm="24" 
+          :md="12" 
+          :lg="12" 
+          :xl="12"
+        >
+          <div class="chart-wrapper">
+            <div ref="chartRefs" class="chart-container"></div>
+          </div>
+        </el-col>
+      </el-row>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, defineProps } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import * as echarts from 'echarts';
 
 const props = defineProps({
@@ -60,20 +71,74 @@ const renderCharts = () => {
       const currentData = props.data[index] || { title: '', labels: [], values: [] };
 
       const option = {
-        title: { text: currentData.title || `查询结果 ${index + 1}` },
-        tooltip: { trigger: 'axis' },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'category', data: currentData.labels || [] },
-        yAxis: { type: 'value' },
+        title: { 
+          text: currentData.title || `查询结果 ${index + 1}`,
+          left: 'center',
+          top: 10,
+          textStyle: {
+            fontSize: 16,
+            fontWeight: 'normal'
+          }
+        },
+        tooltip: { 
+          trigger: 'axis',
+          axisPointer: {
+            type: 'shadow'
+          }
+        },
+        grid: { 
+          left: '3%', 
+          right: '4%', 
+          bottom: '3%', 
+          containLabel: true,
+          top: 60
+        },
+        xAxis: { 
+          type: 'category', 
+          data: currentData.labels || [],
+          axisLabel: {
+            interval: 0,
+            rotate: 30
+          }
+        },
+        yAxis: { 
+          type: 'value',
+          name: currentData.yAxisName || '',
+          nameTextStyle: {
+            padding: [0, 0, 0, 40]
+          }
+        },
         series: [{
           data: currentData.values || [],
           type: 'line',
           smooth: true,
-        }],
+          symbol: 'circle',
+          symbolSize: 8,
+          itemStyle: {
+            color: '#409EFF'
+          },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              {
+                offset: 0,
+                color: 'rgba(64,158,255,0.3)'
+              },
+              {
+                offset: 1,
+                color: 'rgba(64,158,255,0.1)'
+              }
+            ])
+          }
+        }]
       };
 
       instance.setOption(option);
       chartInstances[index] = instance;
+
+      // 响应式调整
+      window.addEventListener('resize', () => {
+        instance.resize();
+      });
     });
   });
 };
@@ -90,7 +155,7 @@ watch(
   () => props.data,
   () => {
     if (isAllEmpty.value) {
-      // 如果数据全部为空，则销毁所有图表实例，确保页面只展示列表
+      // 如果数据全部为空，则销毁所有图表实例，确保页面只展示空状态
       chartInstances.forEach(instance => {
         if (instance) instance.dispose();
       });
@@ -105,30 +170,24 @@ watch(
 
 <style scoped>
 .charts-container {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  padding: 20px 0;
 }
 
 .chart-wrapper {
-  width: 100%;
-  height: 400px;
+  background: #fff;
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
 }
 
 .chart-container {
   width: 100%;
-  height: 100%;
+  height: 400px;
 }
 
-/* 列表展示样式 */
-.empty-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.empty-list li {
-  padding: 8px;
-  border-bottom: 1px solid #ddd;
+:deep(.el-empty__description) {
+  margin-top: 20px;
+  color: #909399;
 }
 </style>
